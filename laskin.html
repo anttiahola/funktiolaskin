@@ -1,0 +1,403 @@
+<html>
+<head>
+<title>Funktiolaskin (C) 2002-2006 Antti Ahola</title>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<style TYPE="text/css" MEDIA="screen">
+.iso {font-family: Verdana; font-size: 14px; border: 1px #CCCCCC solid}
+.mid {font-family: Verdana; font-size: 12px; border: 1px #CCCCCC solid}
+.iso2 {font-family: Verdana; font-size: 14px; border: 0px #CCCCCC solid}
+.mid2 {font-family: Verdana; font-size: 12px}
+</style>
+<script type="text/javascript" language="JavaScript1.5">
+function Complex(r, i){
+this.r = r;
+this.i = i;
+}
+var v_erotin          = "(^|[^A-Za-z0-9_])";
+var erotin            = "(?=$|[^A-Za-z0-9_])";
+var sulut             = "\\([^\\(\\)]+\\)";
+var tyhja             = "\\s*";
+var tyhja_re          = /\s+/g;
+var tse               = tyhja + "\\([^\\(\\),]+\\)" + erotin;
+var erotin_onyhta_re  = /\=/;
+var nimi_re           = /[A-Za-z][A-Za-z0-9_]*/;
+var sulku_sisalto_re  = /[^\(\)]+/;
+var sulku_sisalto_g_re= /[^\(\)]+/g;
+var funktio_re        = /(\-\>)|(\:)/;
+var split_funktio_re  = /(?:^\s*)|(?:\s*\-\>\s*)|(?:\s*\:\s*)/;
+var pilkku_re         = /\s*\,\s*/;
+var i_re              = /i/g;
+var real_re           = /^-?\d+\.?\d*(e(\+|-)\d+)?$/;
+var complex_re        = /^-?\d+\.?\d*(e(\+|-)\d+)?i$/;
+var complexkonj_re    = /'$/;
+var complexi_re       = /^-?i$/;
+var alaV_re           = /_/;
+var uminus            = /§/g;
+var uminus2           = /^#+/g;
+var pm                = /\+-/g;
+var mm                = /--/g;
+var eplus             = /e\+/g;
+var emiinus           = /e-/g;
+var e_lower           = /e/g;
+var e_upper           = /E/g;
+var apua              = /^\s*apua\s*$/;
+var reset             = /^\s*reset\s*$/;
+var kuvaile           = /^\s*(?:kuvaile\s+([A-Za-z0-9_]+))|(?:kuvaile)\s*$/;
+var kirjoitettu       = false;
+var kirjoitusSallittu = true;
+var funktiot_re,funktiot_maaritykset,funktiot_nimet,funktiot_funktiot,muuttujat,arvot,vanhat_syotteet,vanhat_index,tulos;
+
+function init(){
+funktiot_re = new Array(
+  new RegExp(v_erotin+"sin"  +tse), new RegExp(v_erotin+"cos"   +tse),
+  new RegExp(v_erotin+"tan"  +tse), new RegExp(v_erotin+"abs"   +tse),
+  new RegExp(v_erotin+"asin" +tse), new RegExp(v_erotin+"acos"  +tse),
+  new RegExp(v_erotin+"atan" +tse), new RegExp(v_erotin+"exp"   +tse),
+  new RegExp(v_erotin+"log"  +tse), new RegExp(v_erotin+"angle"  +tse),
+  new RegExp(v_erotin+"length"+tse), new RegExp(v_erotin+"random"+tse),
+  new RegExp(v_erotin+"round"+tse), new RegExp(v_erotin+"sqrt"  +tse),
+  new RegExp(sulut),
+  new RegExp("(\\+\\s*\\+)|(\\-\\s*\\-)", "g"),
+  new RegExp("(\\+\\s*\\-)|(\\-\\s*\\+)", "g"),
+  new RegExp("(\\*|\\/|\\^|\\%)\\s*\\-", "g"),
+  new RegExp("(\\*|\\/|^|\\^|\\%)\\s*\\+", "g"),
+  new RegExp("^\\s*\\-"),
+  new RegExp("\\+|\\-", "g"),
+  new RegExp("\\*|\\/", "g"),
+  new RegExp("\\^", "g"),
+  new RegExp("\\%", "g"),
+  new RegExp("^(\\-|§|#)\\d+\\.?\\d*$"),
+  new RegExp("^\\d+\\.?\\d*$"));
+funktiot_funktiot = new Array(
+  new Function("x", "return zsin(x);"),
+  new Function("x", "return zcos(x);"),
+  new Function("x", "return ztan(x);"),
+  new Function("x", "return new Complex(Math.abs(x.r), Math.abs(x.i));"),
+  new Function("x", "return zasin(x);"),
+  new Function("x", "return zacos(x);"),
+  new Function("x", "return zatan(x);"),
+  new Function("x", "return zexp(x);"),
+  new Function("x", "return zlog(x);"),
+  new Function("x", "return new Complex(zangle(x), 0);"),
+  new Function("x", "return new Complex(zlength(x),0);"),
+  new Function("x", "return new Complex(Math.random()*x.r, Math.random()*x.i);"),
+  new Function("x", "return new Complex(Math.round(x.r), Math.round(x.i));"),
+  new Function("x", "return zsqrt(x);"),
+  15,"+","-","$1#","$1","0-",20,21,22,23,24,25);
+muuttujat = new Array(new RegExp( v_erotin + "ans" + erotin, "g"));
+arvot     = new Array("0");
+funktiot_maaritykset = new Array();
+funktiot_nimet = new Array();
+vanhat_syotteet = new Array();
+vanhat_index = -1;
+}
+
+init();
+
+function loppurutiini(){
+  window.scrollBy(0, 300);
+  funktiolaskin.syote.value = "";
+  funktiolaskin.syote.focus();
+  return false;
+}
+
+function doReset(){
+  init();
+  document.all.ifrm.innerHTML = "Muisti tyhjennetty. <br><br>";
+  document.all.funktiot.innerHTML = "";
+  document.all.muuttujat.innerHTML = "";
+  return loppurutiini();
+}
+
+function keyUp_input(event){
+  if(event.keyCode == 38 && vanhat_index >= 0){
+    vanhat_index -= (vanhat_index == 0 ? 0 : 1);
+    funktiolaskin.syote.value = vanhat_syotteet[vanhat_index];
+    funktiolaskin.syote.select();
+  }
+
+  if(event.keyCode == 40 && vanhat_index < vanhat_syotteet.length ){
+    vanhat_index += (vanhat_index < vanhat_syotteet.length ? 1 : 0);
+    funktiolaskin.syote.value = vanhat_index < vanhat_syotteet.length ? vanhat_syotteet[vanhat_index] : "";
+    funktiolaskin.syote.select();
+  }
+}
+
+function teeapua(syote){
+  kirjoita(
+    "Voit syöttää laskutoimituksen muodossa&quot;<b>0.5 + 2.2</b>&quot;<br>\n" +
+    "Desimaalierotin on <b>piste</b>.<br><br>" +
+    "Muuttujan määritys muodossa &quot;<b>a = 2 * 7</b>&quot;<br>" +
+    "Muuttujaan &quot;<b>ans</b>&quot; on tallennettu edellisen laskun tulos.<br><br>" +
+    "Funktion määritys muodossa&quot;<b>funktio1 : x, y -> x * a + 2 * y</b>&quot;<br>" +
+    "Funktion käyttö:&quot;<b>funktio1(3, 5)</b>&quot;<br>" +
+    "Yhdessä funktiossa voi olla 1-N kappaletta parametreja.<br>" +
+    "Valmiit funktiot: <b>sin, cos, tan, asin, acos, atan, <br>sqrt, exp, log, round, length, angle, random, abs</b><br>" +
+    "Saat näytölle itse tekemäsi funktion kuvauksen<br>"+
+    "kirjoittamalla &quot;<b>kuvaile funktio1</b>&quot;<br> tai pelkästään &quot;<b>kuvaile</b>&quot;<br>" +
+    "Kompleksiluvut esitetään muodossa &quot;<b>0.5 + 2.2i</b>&quot; <br>"+
+    "Kompleksikonjugaattimerkki on hipsu, esim. &quot;<b>6*(0.5 + 2.2i)'-1</b>&quot; <br>"+
+    "Kompleksilukuja voit käyttää myös funktioissa.<br>"+
+    "Esim. &quot;<b>pituus : z -> sqrt(z*z')</b>&quot;.<br>"+
+    "Älä ylikuormita funktioita tai yritä määritellä funktioita tai muuttujia uudelleen.<br>"+
+    "Ole tarkkana syötteiden oikeellisuuden kanssa,<br> sillä väärästä syötteestä ei tule varoitusta.<br>"+
+    "<br>Voit selata historiaa nuoli yl&ouml;s ja alas -n&auml;pp&auml;imill&auml;.<br>" +
+    "<br>Muistin voit tyhjentää kirjoittamalla &quot;<b>reset</b>&quot;<br><br>");
+
+    return loppurutiini();
+}
+
+function selita(lista, selitykset, haettava){
+  for(var i = 0; i < lista.length; i++)
+    if(lista[i] == haettava || haettava==undefined || haettava=="")
+      kirjoita(selitykset[i]+"<br>");
+  kirjoita("<br>");
+}
+
+function funktiolaske(syote_alkup){
+  if(kuvaile.test(syote_alkup)){
+      kirjoita(">> " + syote_alkup + "<br><br>");
+      selita(funktiot_nimet, funktiot_maaritykset, syote_alkup.match(kuvaile)[1]);
+      return loppurutiini();
+  }
+  if(apua.test(syote_alkup))
+      return teeapua(syote_alkup);
+
+  if(reset.test(syote_alkup))
+      return doReset(syote_alkup);
+
+  var syote = syote_alkup.replace(tyhja_re, "");
+
+  if(syote == "") return false;
+
+  if(kirjoitusSallittu) vanhat_syotteet.push(syote), vanhat_index = vanhat_syotteet.length;
+
+  kirjoitettu = false;
+
+  for(var i = 0; i < arvot.length && arvot.length != 0; syote = syote.replace(muuttujat[i], "$1"+arvot[i++])){}
+  syote = syote.replace(eplus, "e").replace(emiinus, "E");
+
+  if(funktio_re.test(syote))
+    uusi_funktio(syote.split(split_funktio_re), syote_alkup);
+  else if(erotin_onyhta_re.test(syote))
+    uusi_muuttuja(syote.split(erotin_onyhta_re));
+  else
+    tulos = selvenna(pakkaaKompleksi(laske_main(syote)));
+
+  work_add = ">> " + syote_alkup + "<br><br>";
+
+  if(!kirjoitettu){
+    work_add += "ans = " + tulos + "<br><br>";
+    arvot[0] = "("+tulos+")";
+  }
+
+  kirjoita(work_add);
+  return loppurutiini();
+}
+
+function kirjoita(lause){
+  if(kirjoitusSallittu) document.all.ifrm.innerHTML += lause;
+}
+
+function uusi_funktio(osat, alkuperainen){
+  var mtt = osat[1].split(pilkku_re);
+  var sulut2 = "\\(\\s*"+"(?:[^\\(\\),]+\\s*,\\s*){"+(mtt.length-1)+"}"+"[^\\(\\),]+\\s*\\)";
+  funktiot_re.push(new RegExp(v_erotin+osat[0]+ tyhja + sulut2 + erotin));
+
+  funktiot_funktiot.push(new Array());
+  for(var i = 0; i < mtt.length; i++)
+    funktiot_funktiot[funktiot_funktiot.length-1].push(new RegExp(v_erotin+mtt[i] + erotin, "g"));
+  funktiot_funktiot[funktiot_funktiot.length-1].push(osat[2]);
+
+  document.all.funktiot.innerHTML += osat[0] + "<br>\n";
+  funktiot_nimet.push(osat[0]);
+  funktiot_maaritykset.push(alkuperainen);
+  kirjoitettu=true;
+}
+
+function uusi_muuttuja(osat){
+  muuttujat.push(new RegExp( v_erotin + osat[0].match(nimi_re)[0] + erotin, "g"));
+  arvot.push("("+selvenna(pakkaaKompleksi(laske_main(osat[1])))+")");
+
+  document.all.muuttujat.innerHTML += osat[0].match(nimi_re)[0] + " = " + arvot[arvot.length-1].match(sulku_sisalto_g_re)[0] + "<br>\n";
+  kirjoitettu=true;
+}
+
+function laske_main(syoterivi){
+  for(var i = 26; i < funktiot_re.length; i++)
+    if(funktiot_re[i].test(syoterivi)){
+      var temp = syoterivi.match(funktiot_re[i])[0].match(sulku_sisalto_g_re)[1].split(pilkku_re);
+      var funktiorunko = funktiot_funktiot[i][(funktiot_funktiot[i]).length-1];
+      for(var j = 0; j < funktiot_funktiot[i].length-1; funktiorunko = funktiorunko.replace(funktiot_funktiot[i][j], "$1("+temp[j++]+")")){}
+      return laske_main( syoterivi.replace(funktiot_re[i], "$1(" + funktiorunko+")"));
+    }
+
+  for(var i = 0; i < 26; i++)
+    if(funktiot_re[i].test(syoterivi))
+      switch(i){
+        case 0:case 1:case 2:case 3:case 4:case 5:case 6:case 7:case 8:case 9:case 10:case 11:case 12:case 13:
+          return laske_main( syoterivi.replace(funktiot_re[i], "$1" + pakkaaKompleksi(funktiot_funktiot[i](laske_main(syoterivi.match(funktiot_re[i])[0].match(sulku_sisalto_g_re)[1] ))).replace(eplus, "e").replace(emiinus, "E") ));
+        case 14:
+          var tmp = laske_main(syoterivi.match(funktiot_re[i])[0].match(sulku_sisalto_re)[0]);
+
+          return laske_main(syoterivi.replace(funktiot_re[i], pakkaaKompleksi(tmp).replace(eplus, "e").replace(emiinus, "E") ));
+        case 15:case 16:case 17:case 18:case 19:
+          return laske_main(syoterivi.replace(funktiot_re[i], funktiot_funktiot[i]));
+        case 20:case 21:case 23:
+          return laske_valitulos(syoterivi.split(funktiot_re[i]), syoterivi.match(funktiot_re[i]));
+        case 22:
+          var s = syoterivi.split(funktiot_re[i]);
+          var valitulos;
+          //potenssiin korotus on oikealta vasemmalle
+          if(s.length != syoterivi.match(funktiot_re[i]).length+1)
+            return Number.NaN;
+          else
+            for(var i = s.length-2, valitulos = laske_main(s[s.length-1]); i >= 0; valitulos = zpow(laske_main(s[i--]), valitulos) ){}
+          return valitulos;
+        case 24:
+          syoterivi.replace(uminus, "-");
+        case 25:
+          break;
+        }
+  return puraKompleksi(syoterivi);
+}
+
+function selvenna(pcplx){
+  return pcplx.replace(alaV_re, "+").replace(uminus, "-").replace(pm, "-").replace(mm, "+");
+}
+
+function pakkaaKompleksi(z){
+  return (z.r==0 && z.i!=0?"": (z.r<0?(z.i==0?"§":"§")+Math.abs(z.r):z.r))+(z.i==0?"": ( (z.r==0?"":"_")+(z.i<0?"§"+(z.i == -1?"":-z.i) :(z.i == 1?"":z.i))+"i"));
+}
+
+function puraKompleksi(cplx){
+  var z = new Complex(0, 0);
+  var isKonj      = complexkonj_re.test(cplx);
+  var kerroin = 1 - 2 * ( (uminus2.test(cplx) ? RegExp.lastMatch.length : 128) % 2);
+  cplx = cplx.replace(uminus2, "");
+
+  cplx = cplx.replace(uminus, "-").replace(e_lower, "e+").replace(e_upper, "e-");
+  cplx = isKonj ? cplx.replace(complexkonj_re,"") :cplx;
+  z.r = real_re.test(cplx) ? cplx : 0;
+  z.i = complex_re.test(cplx) ? cplx.replace(i_re, "") : 0;
+  if(complexi_re.test(cplx)) z.i = cplx.replace(i_re, "")+"1";
+  z.r = alaV_re.test(cplx) ? z.r=Number(cplx.split(alaV_re)[0]) : z.r=Number(z.r);
+  if(alaV_re.test(cplx)) z.i=cplx.split(alaV_re)[1].replace(i_re,"");
+  if(alaV_re.test(cplx) && (z.i == "" || z.i == "-")) z.i+="1";
+  z.i = kerroin * (isKonj ? -Number(z.i) : Number(z.i));
+  z.r *= kerroin;
+  return z;
+}
+
+function laske_valitulos(osat, erottimet){
+  if(osat.length != erottimet.length+1)
+    return Number.NaN;
+
+  var z = laske_main(osat[0]);
+
+  for(var i = 1; i < osat.length; i++){
+
+    var z_tmp = laske_main(osat[i]);
+    var real = z.r;
+    var imag = z.i;
+
+    switch(erottimet[i-1]){
+    case "*":
+      z.r = real*z_tmp.r-imag*z_tmp.i;
+      z.i = imag*z_tmp.r+real*z_tmp.i;
+      break;
+    case "%":
+      z.r %= z_tmp.r;
+      break;
+    case "/":
+      z.r = (real*z_tmp.r+imag*z_tmp.i) / (z_tmp.r*z_tmp.r+z_tmp.i*z_tmp.i);
+      z.i = (imag*z_tmp.r-real*z_tmp.i) / (z_tmp.r*z_tmp.r+z_tmp.i*z_tmp.i);
+      break;
+    case "+":
+      z.r = real+z_tmp.r;
+      z.i = imag+z_tmp.i;
+      break;
+    case "-":
+      z.r = real-z_tmp.r;
+      z.i = imag-z_tmp.i;
+      break;
+    }
+  }
+  return z;
+}
+
+function zangle(z){ return Math.atan2(z.i, z.r); }
+function zlength(z) { return Math.sqrt(z.i*z.i+z.r*z.r); }
+function zexp(z){ return new Complex(Math.exp(z.r)*Math.cos(z.i), Math.exp(z.r)*Math.sin(z.i)); }
+function zlog(z){ return new Complex(Math.log(zlength(z)), zangle(z)); }
+
+function zsin(z) {
+  if(z.i==0) return new Complex(Math.sin(z.r),0);
+  return laske_main("(exp(i*"+pakkaaKompleksi(z)+")-exp(-i*"+pakkaaKompleksi(z)+"))/2i");
+}
+
+function zasin(z) {
+  if(z.i==0) return new Complex(Math.asin(z.r),0);
+  return laske_main("-i*log(i*"+pakkaaKompleksi(z)+"+sqrt(1-"+pakkaaKompleksi(z)+"^2))");
+}
+
+function zacos(z) {
+  if(z.i==0) return new Complex(Math.acos(z.r),0);
+  return laske_main(Math.PI+"/2+i*log(i*"+pakkaaKompleksi(z)+"+sqrt(1-"+pakkaaKompleksi(z)+"^2))");
+}
+
+function zatan(z) {
+  if(z.i==0) return new Complex(Math.atan(z.r),0);
+  return laske_main("i*(log(1-i*"+pakkaaKompleksi(z)+")-log(1+i*"+pakkaaKompleksi(z)+"))/2");
+}
+
+function zcos(z) {
+  if(z.i==0) return new Complex(Math.cos(z.r),0);
+  return laske_main("(exp(i*"+pakkaaKompleksi(z)+")+exp(-i*"+pakkaaKompleksi(z)+"))/2");
+}
+
+function ztan(z) {
+  if(z.i==0) return new Complex(Math.tan(z.r),0);
+  return laske_main("(exp(2i*"+pakkaaKompleksi(z)+")-1)/(i*(exp(2i*"+pakkaaKompleksi(z)+")+1))");
+}
+
+function zsqrt(z){
+  if(z.i == 0) return z.r < 0 ? new Complex(0,Math.sqrt(-z.r)):new Complex(Math.sqrt(z.r),0);
+  return zpow(z, new Complex(0.5, 0));
+}
+
+function zpow(z, w){
+  if(z.i == 0 && w.i == 0) return new Complex(Math.pow(z.r, w.r), 0);
+  var l = Math.pow(zlength(z),w.r) * Math.exp(-w.i*zangle(z));
+  var ar =  w.r * zangle(z) + w.i * Math.log( zlength(z));
+  return new Complex(l*Math.cos(ar), l*Math.sin(ar));
+}
+
+</script>
+</head>
+<body bgcolor="#FFFFFF" text="#000000">
+<center>
+<br>
+<form name="funktiolaskin" onSubmit='return funktiolaske(this.syote.value)'>
+  <table cellpadding="2px">
+    <tr> 
+      <td id="ifrm" class="mid" valign="top">Funktiolaskin v3.1.<br>Toiminta testattu: IE 6.0sp1, Firefox 1.5.<br><br>Kirjoita "apua", jos et muuta keksi.<br><br></td>
+      <td id="funktiot" class="mid2" valign="bottom">
+        <b>Funktiot:</b><i><br>sin<br>cos<br>tan<br>asin<br>acos<br>atan<br>sqrt<br>exp<br>log<br>round<br>length<br>angle<br>random<br>abs</i><br>     
+    </td>
+      <td id="muuttujat" class="mid2" valign="bottom">
+        <b>Muuttujat:</b><br>
+      </td>
+    </tr>
+    <tr>
+      <td class="iso" nowrap>&gt;&gt; 
+        <input type="text" size=70 name="syote" value="" class="iso2" onKeyUp="keyUp_input(event)">
+      </td>
+    </tr>
+  </table>
+</form>
+</center>
+<script type="text/javascript" language="JavaScript1.5">funktiolaskin.syote.focus();</script>
+</body>
+</html>
+
